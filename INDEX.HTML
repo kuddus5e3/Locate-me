@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+
+<title>Track Location</title>
+<style>
+    select{
+        text-align-last: center;
+        text-align: center; 
+        -ms-text-align-last: center;
+        -moz-text-align-last: center;
+        height: 25px;
+        width: 200px;
+    }
+</style>
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+<script src="https://unpkg.com/lokijs@^1.5/build/lokijs.min.js"></script>
+</head>
+
+<body>
+
+
+<!-- For manual entry -->
+    <div class="display" name="display" id="display">
+<form name="form1" id="form1" action="/action_page.php">
+Country: <select name="country" id="country" >
+    <option value="" selected="selected">-----Select country-----</option>
+  </select>
+  &nbsp;&nbsp;&nbsp;&nbsp;
+State: <select name="state" id="state">
+    <option value="" selected="selected">--Please select country first--</option>
+  </select>
+  &nbsp;&nbsp;&nbsp;&nbsp;
+City: <select name="city" id="city">
+    <option value="" selected="selected">--Please select state first--</option>
+  </select>
+  <br><br>
+  <input type="submit" value="Submit">  
+</form>
+</div>
+
+
+
+    <p>Click the button to get Location.</p>
+    
+    <button type="button" onclick="getLocation()">Find Location</button>
+    <pre id="json-result"></pre>
+<!-- To get Coordinates -->
+    <script>   
+    var result = document.getElementById("json-result");
+    const Http = new XMLHttpRequest();
+
+    //getting coordinates
+    function getLocation() {
+        console.log("getLocation Called");
+        var bdcApi = "https://api.bigdatacloud.net/data/reverse-geocode-client"
+
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                bdcApi = bdcApi
+                    + "?latitude=" + position.coords.latitude
+                    + "&longitude=" + position.coords.longitude
+                    + "&localityLanguage=en";
+                getApi(bdcApi);
+
+            },
+            (err) => { getApi(bdcApi); },
+            {
+                enableHighAccuracy: true,
+                timeout: 5000,
+                maximumAge: 0
+            });
+    }
+
+    //getting location from API
+    function getApi(bdcApi) {
+         Http.open("GET", bdcApi);
+        Http.send();
+        Http.onreadystatechange = function () {
+            if (this.readyState == 4 && this.status == 200) {
+                var obj = JSON.parse(this.responseText);
+                if(obj.locality.split(" ")[0]=="A")
+                {
+                  alert("Please allow to access your location");
+                }
+                else
+                {
+
+                //Appending location to auto populate.
+                result.innerHTML = obj.locality.split(" ")[0] + "<br>" + obj.principalSubdivision+ "<br>" + obj.countryName;
+                $('#country').empty();
+                $('#state').empty();
+                $('#city').empty();
+                $('#country').append(`<option value="${obj.countryName}">${obj.countryName}</option>`);
+                $('#state').append(`<option value="${obj.principalSubdivision}">${obj.principalSubdivision}</option>`);
+                $('#city').append(`<option value="${obj.locality.split(" ")[0]}">${obj.locality.split(" ")[0]}</option>`);
+              }
+
+            }
+        };
+    }
+</script>
+<script>
+
+//creating loki db
+var db = new loki('example.db');
+const data = "https://raw.githubusercontent.com/dr5hn/countries-states-cities-database/master/countries%2Bstates%2Bcities.json";
+var index;
+
+
+//getting data from loki collections
+function loaddata(countries) {
+  return new Promise(resolve => {
+    setTimeout(() => {
+      resolve(countries= db.getCollection("countries").data);
+    }, 1000);
+  });
+}
+
+
+//loading json data and populate in country select
+async function initializeData() {
+  var countries = db.getCollection("countries");
+  if (!countries) {
+    countries = db.addCollection('countries');
+    await fetch(data)
+      .then(response => response.json())
+      .then(async (data) => {
+        await data.forEach((c) => {
+          countries.insert(c);
+          //console.log(c.name);
+          $('#country').append(`
+            <option value="${c.name}">${c.name}</option>
+          `);
+
+        });
+      });
+  }
+}
+
+window.onpaint = initializeData();
+
+//Auto populate in state if change in country
+$('#country').on('change',async function() {
+var countries = await loaddata(countries);
+$('#state').empty();
+$('#city').empty();
+var option = $(this).val();
+index = countries.findIndex(function(item, i){
+  return item.name === option;
+});
+$('#state').append(`
+            <option value="" selected="selected">--Please select country first--</option>
+          `);
+$('#city').append(`
+            <option value="" selected="selected">--Please select state first--</option>
+          `);
+countries[index]["states"].forEach((c) =>{
+$('#state').append(`
+            <option value="${c.name}">${c.name}</option>
+          `);
+});
+});
+
+
+//Auto populate in city if change in state
+$('#state').on('change',async function() {
+var countries = await loaddata(countries);
+$('#city').empty();
+var option = $(this).val();
+var ind = countries[index]["states"].findIndex(function(item, i){
+    return item.name === option;
+});
+$('#city').append(`
+            <option value="" selected="selected">--Please select state first--</option>
+          `);
+countries[index]["states"][ind]['cities'].forEach((c) =>{
+$('#city').append(`
+            <option value="${c.name}">${c.name}</option>
+          `);
+});
+
+});
+</script>
+
+</body>
+</html>
